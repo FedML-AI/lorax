@@ -1,22 +1,11 @@
 import docker
 import os
 
+import utils
 import types
 import yaml
 
-from fedml.utils.logging import logger
-
 CURRENT_DIR = os.path.dirname(__file__)
-
-
-def load_endpoint(filepath: str) -> types.SimpleNamespace:
-    with open(filepath, "r") as stream:
-        try:
-            yaml_dict = yaml.safe_load(stream)
-            yaml_obj = types.SimpleNamespace(**yaml_dict)
-            return yaml_obj
-        except yaml.YAMLError as err:
-            logger.error(err)
 
 
 def spawn_lorax_container(endpoint: types.SimpleNamespace):
@@ -44,6 +33,6 @@ def spawn_lorax_container(endpoint: types.SimpleNamespace):
 
 if __name__ == "__main__":
     endpoint_yaml_fp = os.path.join(CURRENT_DIR, 'endpoint.yaml')
-    endpoint = load_endpoint(endpoint_yaml_fp)
+    endpoint = utils.load_endpoint(endpoint_yaml_fp)
     spawn_lorax_container(endpoint)
     print(endpoint)

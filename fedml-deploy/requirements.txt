@@ -1,2 +1,3 @@
 fedml>=0.8.2
 docker>=7
+openai>=1.16
