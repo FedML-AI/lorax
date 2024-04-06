@@ -28,7 +28,8 @@ def spawn_lorax_container(endpoint: types.SimpleNamespace):
         shm_size="1g",
         ports={"80/tcp": endpoint.lorax_port},
         volumes={docker_volume: {"bind": "/data", "mode": "rw"}})
-    print(exec_res)
+    print("Container Object Reference: {}".format(exec_res))
+    print("Continer Status: {}".format(exec_res.status))
 
 
 if __name__ == "__main__":
