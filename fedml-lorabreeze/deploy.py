@@ -3,7 +3,6 @@ import os
 
 import utils
 import types
-import yaml
 
 CURRENT_DIR = os.path.dirname(__file__)
 
@@ -29,7 +28,7 @@ def spawn_lorax_container(endpoint: types.SimpleNamespace):
         ports={"80/tcp": endpoint.lorax_port},
         volumes={docker_volume: {"bind": "/data", "mode": "rw"}})
     print("Container Object Reference: {}".format(exec_res))
-    print("Continer Status: {}".format(exec_res.status))
+    print("Container Status: {}".format(exec_res.status))
 
 
 if __name__ == "__main__":

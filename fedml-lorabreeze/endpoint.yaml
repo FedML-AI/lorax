@@ -5,7 +5,7 @@ lorax_hugging_face_model_id: "TheBloke/zephyr-7B-beta-AWQ"
 lorax_gpu_ids: ["0"] # needs to be a list of strings
 lorax_port: 8888
 lorax_quantize: "awq" # others are: bitsandbytes, bitsandbytes-fp4, bitsandbytes-nf4, awq, gpt-q, eetq, hqq
-lorax_pressure_test_hugging_face_adaptors: [
+lorax_hugging_face_adaptors: [
     "ernest/redline_v3_adapter_864",
     "ernest/intent_redline_v3_adapter_2064",
     "ernest/redline_v3_adapter_864",

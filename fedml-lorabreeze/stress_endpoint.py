@@ -12,6 +12,7 @@ from openai import OpenAI
 CURRENT_DIR = os.path.dirname(__file__)
 LATENCIES = defaultdict(list)
 ENDPOINT = utils.load_endpoint(os.path.join(CURRENT_DIR, "endpoint.yaml"))
+ENDPOINT_ADAPTERS = ENDPOINT.lorax_hugging_face_adaptors
 
 client = OpenAI(
     api_key="test",  # this can be anything but definitely non-empy!
@@ -48,7 +49,7 @@ def random_generator(rand_seed=0, lb=1, ub=5):
 
 async def main():
     for _ in range(1):
-        for adapter_id in ENDPOINT.lorax_pressure_test_hugging_face_adaptors:
+        for adapter_id in ENDPOINT_ADAPTERS:
             await asyncio.sleep(1)
             for _ in range(10):
                 await model_adapter_https(adapter_id)
