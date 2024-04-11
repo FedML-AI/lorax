@@ -22,7 +22,7 @@ def spawn_lorax_container(endpoint: types.SimpleNamespace):
             docker.types.DeviceRequest(
                 device_ids=endpoint.lorax_gpu_ids,
                 capabilities=[['gpu']])],
-        auto_remove=True,
+        auto_remove=False,
         detach=True,
         shm_size="1g",
         ports={"80/tcp": endpoint.lorax_port},

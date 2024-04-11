@@ -1,3 +1,6 @@
-fedml>=0.8.2
+accelerate>=0.20
+bitsandbytes>=0.30
 docker>=7
+fedml>=0.8.2
 openai>=1.16
+transformers>=4.3
