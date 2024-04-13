@@ -4,7 +4,7 @@ docker_volume: ""
 lorax_hugging_face_model_id: "ernest/zephyr_7b_beta_bnb_int4"
 lorax_gpu_ids: ["3"] # needs to be a list of strings
 lorax_port: 8889
-lorax_quantize: "bitsandbytes" # others are: awq, bitsandbytes, bitsandbytes-fp4, bitsandbytes-nf4, gpt-q, eetq, hqq
+lorax_quantize: "bitsandbytes-nf4" # others are: awq, bitsandbytes, bitsandbytes-fp4, bitsandbytes-nf4, gpt-q, eetq, hqq
 lorax_hugging_face_adaptors: [
     "ernest/redline_v3_adapter_864",
     "ernest/intent_redline_v3_adapter_2064",

@@ -2,7 +2,8 @@ workspace: "."
 entry_point: "main.py"
 use_gpu: true
 num_gpus: 1
-bootstrap: 
+
+bootstrap:
   echo "Bootstrap start..."
 
   pip3 install "fedml-deploy>=0.8.17" "httpx" "fastapi>=0.68.0" "uvicorn>=0.15.0" "requests>=2.3.0"

@@ -1,11 +1,11 @@
-import os
-from http import HTTPStatus
-
 import httpx
+import os
 import uvicorn
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from fedml.serving import FedMLInferenceRunner
+from http import HTTPStatus
 
 
 class LoraxChatCompletionInferenceRunner(FedMLInferenceRunner):
@@ -59,8 +59,7 @@ class LoraxChatCompletionInferenceRunner(FedMLInferenceRunner):
             lorax_json = self.default_generation_config.copy()
             lorax_json.update(input_json.copy())
 
-            fullname = f"{adaptor_to_owner[lorax_json['
-            + ']]}/{lorax_json['model']}"
+            fullname = f"{adaptor_to_owner[lorax_json['+ ']]}/{lorax_json['model']}"
             lorax_json["model"] = fullname
 
             lorax_header = {
