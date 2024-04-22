@@ -1,6 +1,6 @@
 #! /bin/bash
 
-LORAX_IMAGE=lorax-fedml-lorabreeze
+LORAX_IMAGE=predibase/lorax:fedml
 SCRIPT=$(realpath "$0")
 SCRIPT_PATH=$(dirname "$SCRIPT")
 cd "${SCRIPT_PATH}" || exit
@@ -8,11 +8,12 @@ VOLUME=$PWD/../data
 
 # Model 1
 #MODEL=TheBloke/zephyr-7B-beta-AWQ
-#docker run --detach --gpus "device=0" --shm-size 1g -p 8889:80 -v "$VOLUME":/data "$LORAX_IMAGE" --model-id "$MODEL" --quantize awq
+#docker run --detach --gpus "device=3" --shm-size 1g -p 8889:80 -v "$VOLUME":/data "$LORAX_IMAGE" --model-id "$MODEL" --quantize awq
 
 # Model 2
-MODEL=ernest/zephyr_7b_beta_bnb_int4
-docker run --detach --gpus "device=0" --shm-size 1g -p 8889:80 -v "$VOLUME":/data "$LORAX_IMAGE" --model-id "$MODEL" --quantize bitsandbytes-nf4 # --dtype bfloat16
+#MODEL=ernest/zephyr_7b_beta_bnb_int4
+MODEL=arnavgrg/zephyr-7b-beta-nf4-fp16-upscaled
+docker run --detach --gpus "device=3" --shm-size 1g -p 8889:80 -v "$VOLUME":/data "$LORAX_IMAGE" --model-id "$MODEL" --quantize bitsandbytes-nf4 # --dtype bfloat16
 
 cd - || exit
 
