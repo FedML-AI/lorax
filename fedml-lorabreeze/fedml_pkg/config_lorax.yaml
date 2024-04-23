@@ -1,18 +1,11 @@
 workspace: "."
-entry_point: "main.py"
 use_gpu: true
 num_gpus: 1
 
-bootstrap:
-  echo "Bootstrap start..."
-
-  pip3 install "fedml-deploy>=0.8.17" "httpx" "fastapi>=0.68.0" "uvicorn>=0.15.0" "requests>=2.3.0"
-
-  echo "Installing Prerequisites"
+inference_image_name: "raphael/lorax"
 
 auto_detect_public_ip: true
-request_input_example: 
-  model: alignment-handbook/zephyr-7b-dpo-lora
+request_input_example:
   messages:
   - role: system
     content: You are a helpful assistant.
@@ -23,5 +16,7 @@ request_input_example:
   - role: user
     content: Where was it played?
 
-# apiType: "lorax"
+environment_variables:
+  LORA_BASE_MODEL_ID: "arnavgrg/zephyr-7b-beta-nf4-fp16-upscaled"
+
 endpoint_api_type: "text2text_llm_openai_chat_completions"

@@ -1,6 +1,8 @@
 import httpx
 import os
+import copy
 import uvicorn
+import requests
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -43,28 +45,26 @@ class LoraxChatCompletionInferenceRunner(FedMLInferenceRunner):
         @api.post("/chat/completions")
         async def predict(request: Request):
             input_json = await request.json()
-            adaptor_to_owner = {
-                "qlora-adapter-Mistral-7B-Instruct-v0.1-gsm8k": "vineetsharma",
-                "dolphin-2.6-mistral-7b-dpo-laser-function-calling-lora": "Yhyu13",
-                "FuncMaster-v0.1-Mistral-7B-Instruct-Lora": "allyson-ai",
-                "Mistral-7B-LoRA-AudioWhisper": "sshh12",
-            }
 
             accept_type = request.headers.get("Accept", "application/json")
             assert accept_type == "application/json" or accept_type == "*/*"
 
             is_streaming = input_json.get("stream", False)
 
-            lorax_base_url = "http://38.101.196.134:8080/v1"
-            lorax_json = self.default_generation_config.copy()
-            lorax_json.update(input_json.copy())
+            lorax_base_url = "http://127.0.0.1:80/v1"
 
-            fullname = f"{adaptor_to_owner[lorax_json['+ ']]}/{lorax_json['model']}"
-            lorax_json["model"] = fullname
+            print(f"Input JSON: {input_json}")
+            lorax_json = copy.deepcopy(input_json)
+
+            lorax_json["model"] = input_json.get("adapter_id", os.getenv("LORA_BASE_MODEL_ID", None))
+
+            if lorax_json["model"] is None:
+                return {"error": "Request must have \"adapter_id\" in the request body."}
+
+            print(f"lorax_json: {lorax_json}")
 
             lorax_header = {
                 "Content-Type": "application/json",
-                # "Authorization": f"Bearer {groq_api_key}",
             }
 
             if "messages" in input_json:
@@ -92,7 +92,20 @@ class LoraxChatCompletionInferenceRunner(FedMLInferenceRunner):
 
         @api.get("/ready")
         async def ready():
-            return {"status": "Success"}
+            local_health_url = "http://127.0.0.1:80/health"
+            response = None
+            try:
+                response = requests.get(local_health_url, timeout=3)
+            except:
+                pass
+
+            if not response or response.status_code != 200:
+                # Return 408 code
+                raise HTTPException(
+                    status_code=HTTPStatus.REQUEST_TIMEOUT.value,
+                    detail=f"Local server is not ready."
+                )
+            return True
 
         port = 2345
         uvicorn.run(api, host="0.0.0.0", port=port)
