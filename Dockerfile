@@ -247,18 +247,6 @@ RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2
     sudo ./aws/install && \
     rm -rf aws awscliv2.zip
 
-
-RUN pip3 install fedml
-
-COPY fedml-lorabreeze/fedml_pkg/main.py main.py
-COPY fedml-lorabreeze/fedml_pkg/main.sh main.sh
-
-COPY fedml-lorabreeze/devops/hf_token.txt /root/.cache/huggingface/token
-
-RUN chmod +x /usr/src/main.sh
-
-ENV LORA_BASE_MODEL_ID=""
-
-ENV LORA_PREDOWNLOAD_ADAPTERS=""
-
-CMD ./main.sh --model-id ${LORA_BASE_MODEL_ID}
+# ENTRYPOINT ["./entrypoint.sh"]
+ENTRYPOINT ["lorax-launcher"]
+CMD ["--json-output"]
