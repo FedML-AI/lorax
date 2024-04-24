@@ -12,7 +12,4 @@ COPY ./hf_token.txt /root/.cache/huggingface/token
 
 RUN chmod +x /usr/src/main.sh
 
-ENV LORA_BASE_MODEL_ID=""
-ENV LORA_PREDOWNLOAD_ADAPTERS=""
-
 ENTRYPOINT ["./main.sh"]
