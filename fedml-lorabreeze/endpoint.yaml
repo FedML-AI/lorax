@@ -1,11 +1,11 @@
 docker_container_name: "lorax-fedml-deploy-zephyr7b-bnb"
 docker_image: "predibase/lorax:fedml"
 docker_volume: ""
-lorax_hugging_face_model_id: "ernest/zephyr_7b_beta_bnb_int4"
-lorax_gpu_ids: ["3"] # needs to be a list of strings
-lorax_port: 8889
-lorax_quantize: "bitsandbytes-nf4" # others are: awq, bitsandbytes, bitsandbytes-fp4, bitsandbytes-nf4, gpt-q, eetq, hqq
-lorax_hugging_face_adaptors: [
+fedml_lorax_hugging_face_model_id: "ernest/zephyr_7b_beta_bnb_int4"
+fedml_lorax_gpu_ids: ["3"] # needs to be a list of strings
+fedml_lorax_port: 8889
+fedml_lora_quantize: "bitsandbytes-nf4" # others are: awq, bitsandbytes, bitsandbytes-fp4, bitsandbytes-nf4, gpt-q, eetq, hqq
+fedml_lora_hugging_face_adaptors: [
     "ernest/redline_v3_adapter_864",
     "ernest/intent_redline_v3_adapter_2064",
     "ernest/redline_v3_adapter_864",

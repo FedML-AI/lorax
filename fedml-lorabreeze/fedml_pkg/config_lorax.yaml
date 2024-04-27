@@ -17,6 +17,9 @@ request_input_example:
     content: Where was it played?
 
 environment_variables:
-  LORA_BASE_MODEL_ID: "arnavgrg/zephyr-7b-beta-nf4-fp16-upscaled"
+  #  Launcher Markdown file: `lorax/docs/reference/launcher.md`
+  MODEL_ID: ""  # The base model in hugging face OR a local directory.
+  QUANTIZE: ""  # Possible Values: bitsandbytes, bitsandbytes-nf4, bitsandbytes-fp4, gptq, awq, eetq, hqq-4bit, hqq-3bit, hqq-2bit
+  ADAPTERS_PRELOADED: "" # Model-compatible adapters, the format is "adapter_source_1:adapter_id_1|adapter_source_1:adapter_id_1"
 
 endpoint_api_type: "text2text_llm_openai_chat_completions"

@@ -6,10 +6,13 @@ ENTRYPOINT []
 WORKDIR ./
 RUN pip3 install fedml
 
+# Copy required configuration files.
 COPY ./main.py main.py
 COPY ./main.sh main.sh
 COPY ./hf_token.txt /root/.cache/huggingface/token
 
+# Make executable.
 RUN chmod +x /usr/src/main.sh
 
-ENTRYPOINT ["./main.sh"]
+# We use /bin/bash to execute environmental variable substitution.
+ENTRYPOINT [ "/bin/bash", "-c", "exec ./main.sh" ]

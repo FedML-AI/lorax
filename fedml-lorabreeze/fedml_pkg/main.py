@@ -1,6 +1,7 @@
-import httpx
-import os
 import copy
+import httpx
+import json
+import os
 import uvicorn
 import requests
 
@@ -13,6 +14,7 @@ from http import HTTPStatus
 class LoraxChatCompletionInferenceRunner(FedMLInferenceRunner):
     def __init__(self):
         super().__init__(None)
+        self.are_adapters_preloaded = False
 
         max_new_tokens = os.getenv("MAX_NEW_TOKENS", "")
         try:
@@ -56,11 +58,9 @@ class LoraxChatCompletionInferenceRunner(FedMLInferenceRunner):
             print(f"Input JSON: {input_json}")
             lorax_json = copy.deepcopy(input_json)
 
-            lorax_json["model"] = input_json.get("adapter_id", os.getenv("LORA_BASE_MODEL_ID", None))
-
-            if lorax_json["model"] is None:
+            if "adapter_id" not in lorax_json:
                 return {"error": "Request must have \"adapter_id\" in the request body."}
-
+            lorax_json["model"] = lorax_json["adapter_id"]
             print(f"lorax_json: {lorax_json}")
 
             lorax_header = {
@@ -96,15 +96,34 @@ class LoraxChatCompletionInferenceRunner(FedMLInferenceRunner):
             response = None
             try:
                 response = requests.get(local_health_url, timeout=3)
-            except:
+            except Exception as e:
                 pass
 
             if not response or response.status_code != 200:
-                # Return 408 code
+                # Return 408 code - Basically r
                 raise HTTPException(
                     status_code=HTTPStatus.REQUEST_TIMEOUT.value,
-                    detail=f"Local server is not ready."
-                )
+                    detail=f"Local server is not ready.")
+
+            if self.are_adapters_preloaded is False:
+                url = "http://127.0.0.1:80/generate"
+                payload_template = lambda a_id, a_source: \
+                    json.dumps({"inputs": "[INST]Test[/INST]", "adapter_id": a_id, "adapter_source": a_source})
+                try:
+                    adapters_preloaded = os.getenv("ADAPTERS_PRELOADED", None)
+                    if adapters_preloaded:
+                        adapters = adapters_preloaded.split("|")
+                        for adapter in adapters:
+                            adapter_source, adapter_id = adapter.split(":")
+                            payload = payload_template(adapter_id, adapter_source)
+                            headers = {'Content-Type': 'application/json'}
+                            response = requests.request("POST", url, headers=headers, data=payload)
+                            print("AdapterID: `{}`, AdapterSource: `{}`, LoadMessage: `{}`".format(
+                                adapter_id, adapter_source, response.text))
+                except Exception as e:
+                    print("Error while loading adapters: ", e)
+                self.are_adapters_preloaded = True
+
             return True
 
         port = 2345

@@ -3,5 +3,5 @@
 SCRIPT=$(realpath "$0")
 SCRIPT_PATH=$(dirname "$SCRIPT")
 cd "${SCRIPT_PATH}" || exit
-docker build -t predibase/lorax:fedml .
+docker build -t fedml_lorabreeze .
 cd - || exit
