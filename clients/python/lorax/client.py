@@ -1,5 +1,6 @@
 import json
 import requests
+from requests.adapters import HTTPAdapter, Retry
 
 from aiohttp import ClientSession, ClientTimeout
 from pydantic import ValidationError
@@ -10,7 +11,9 @@ from lorax.types import (
     Response,
     Request,
     Parameters,
-    MergedAdapters, ResponseFormat,
+    MergedAdapters,
+    ResponseFormat,
+    EmbedResponse
 )
 from lorax.errors import parse_error
 
@@ -42,6 +45,8 @@ class Client:
         headers: Optional[Dict[str, str]] = None,
         cookies: Optional[Dict[str, str]] = None,
         timeout: int = 60,
+        session: Optional[requests.Session] = None,
+        max_session_retries: int = 2,
     ):
         """
         Args:
@@ -53,11 +58,82 @@ class Client:
                 Cookies to include in the requests
             timeout (`int`):
                 Timeout in seconds
+            session (`Optional[requests.Session]`):
+                HTTP requests session object to reuse
+            max_session_retries (`int`):
+                Maximum retries for session refreshing on errors
         """
         self.base_url = base_url
+        self.embed_endpoint = f"{base_url}/embed"
         self.headers = headers
         self.cookies = cookies
         self.timeout = timeout
+        self.session = session
+        self.max_session_retries = max_session_retries
+
+    def _create_session(self):
+        """
+        Create a new session object to make HTTP calls.
+        """
+        self.session = requests.Session()
+
+        retry_strategy = Retry(
+            total=5,
+            backoff_factor=2,
+            status_forcelist=[104, 429, 500, 502, 503, 504],
+        )
+        adapter = HTTPAdapter(
+            max_retries=retry_strategy,
+        )
+        self.session.mount("https://", adapter)
+        self.session.mount("http://", adapter)
+    
+    def _post(self, json: dict, stream: bool = False) -> requests.Response:
+        """
+        Given inputs, make an HTTP POST call
+
+        Args:
+            json (`dict`):
+                HTTP POST request JSON body
+
+            stream (`bool`):
+                Whether to stream the HTTP response or not
+        
+        Returns: 
+            requests.Response: HTTP response object
+        """
+        # Instantiate session if currently None
+        if not self.session:
+            self._create_session()
+
+        # Retry if the session is stale and hits a ConnectionError
+        current_retry_attempt = 0
+        
+        # Make the HTTP POST request
+        while True:
+            try:
+                resp = self.session.post(
+                    self.base_url,
+                    json=json,
+                    headers=self.headers,
+                    cookies=self.cookies,
+                    timeout=self.timeout,
+                    stream=stream
+                )
+                return resp
+            except (requests.exceptions.ConnectionError, requests.exceptions.ConnectTimeout) as e:
+                # Refresh session if there is a ConnectionError
+                self.session = None
+                self._create_session()
+                
+                # Raise error if retries have been exhausted
+                if current_retry_attempt >= self.max_session_retries:
+                    raise e
+                
+                current_retry_attempt += 1
+            except Exception as e:
+                # Raise any other exception
+                raise e
 
     def generate(
         self,
@@ -176,18 +252,23 @@ class Client:
             decoder_input_details=decoder_input_details,
             return_k_alternatives=return_k_alternatives
         )
+
+        # Instantiate the request object
         request = Request(inputs=prompt, stream=False, parameters=parameters)
 
-        resp = requests.post(
-            self.base_url,
+        resp = self._post(
             json=request.dict(by_alias=True),
-            headers=self.headers,
-            cookies=self.cookies,
-            timeout=self.timeout,
         )
 
-        # TODO: expose better error messages for 422 and similar errors
-        payload = resp.json()
+        try:
+            payload = resp.json()
+        except requests.JSONDecodeError as e:
+            # If the status code is success-like, reset it to 500 since the server is sending an invalid response.
+            if 200 <= resp.status_code < 400:
+                resp.status_code = 500
+
+            payload = {"message": e.msg}
+
         if resp.status_code != 200:
             raise parse_error(resp.status_code, payload)
 
@@ -300,14 +381,11 @@ class Client:
             watermark=watermark,
             response_format=response_format,
         )
+        # Instantiate the request and session objects
         request = Request(inputs=prompt, stream=True, parameters=parameters)
 
-        resp = requests.post(
-            self.base_url,
+        resp = self._post(
             json=request.dict(by_alias=True),
-            headers=self.headers,
-            cookies=self.cookies,
-            timeout=self.timeout,
             stream=True,
         )
 
@@ -333,6 +411,34 @@ class Client:
                     # If we failed to parse the payload, then it is an error payload
                     raise parse_error(resp.status_code, json_payload)
                 yield response
+
+    
+    def embed(self, inputs: str) -> EmbedResponse:
+        """
+        Given inputs, embed the text using the model
+
+        Args:
+            inputs (`str`):
+                Input text
+        
+        Returns: 
+            Embeddings: computed embeddings
+        """
+        request = Request(inputs=inputs)
+
+        resp = requests.post(
+            self.embed_endpoint,
+            json=request.dict(by_alias=True),
+            headers=self.headers,
+            cookies=self.cookies,
+            timeout=self.timeout,
+        )
+
+        payload = resp.json()
+        if resp.status_code != 200:
+            raise parse_error(resp.status_code, resp.json())
+        
+        return EmbedResponse(**payload)
 
 
 class AsyncClient:
@@ -376,6 +482,7 @@ class AsyncClient:
                 Timeout in seconds
         """
         self.base_url = base_url
+        self.embed_endpoint = f"{base_url}/embed"
         self.headers = headers
         self.cookies = cookies
         self.timeout = ClientTimeout(timeout * 60)
@@ -650,3 +757,26 @@ class AsyncClient:
                             # If we failed to parse the payload, then it is an error payload
                             raise parse_error(resp.status, json_payload)
                         yield response
+    
+
+    async def embed(self, inputs: str) -> EmbedResponse:
+        """
+        Given inputs, embed the text using the model
+
+        Args:
+            inputs (`str`):
+                Input text
+        
+        Returns: 
+            Embeddings: computed embeddings
+        """
+        request = Request(inputs=inputs)
+        async with ClientSession(
+            headers=self.headers, cookies=self.cookies, timeout=self.timeout
+        ) as session:
+            async with session.post(self.embed_endpoint, json=request.dict(by_alias=True)) as resp:
+                payload = await resp.json()
+
+                if resp.status != 200:
+                    raise parse_error(resp.status, payload)
+                return EmbedResponse(**payload)

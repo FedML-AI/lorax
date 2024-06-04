@@ -92,6 +92,11 @@ def get_model(
             dtypetrust_remote_code=trust_remote_code,
         )
 
+    if model_type == "bert":
+        from lorax_server.models.flash_bert import FlashBert
+
+        return FlashBert(model_id, revision=revision, dtype=dtype)
+
     if model_id.startswith("bigcode/") or model_type == "gpt_bigcode":
         from lorax_server.models.flash_santacoder import FlashSantacoderSharded
 
@@ -245,6 +250,20 @@ def get_model(
             trust_remote_code=trust_remote_code,
         )
 
+    if model_type == "phi3":
+        from lorax_server.models.flash_phi3 import FlashPhi3
+
+        return FlashPhi3(
+            model_id,
+            adapter_id,
+            adapter_source,
+            revision,
+            quantize=quantize,
+            compile=compile,
+            dtype=dtype,
+            trust_remote_code=trust_remote_code,
+        )
+
     if model_type == "gemma":
         from lorax_server.models.flash_gemma import FlashGemma
 
@@ -263,6 +282,20 @@ def get_model(
         from lorax_server.models.flash_cohere import FlashCohere
 
         return FlashCohere(
+            model_id,
+            adapter_id,
+            adapter_source,
+            revision,
+            quantize=quantize,
+            compile=compile,
+            dtype=dtype,
+            trust_remote_code=trust_remote_code,
+        )
+
+    if model_type == "dbrx":
+        from lorax_server.models.flash_dbrx import FlashDbrx
+
+        return FlashDbrx(
             model_id,
             adapter_id,
             adapter_source,

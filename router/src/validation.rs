@@ -203,7 +203,7 @@ impl Validation {
         }
 
         let temperature = temperature.unwrap_or(1.0);
-        if temperature <= 0.0 {
+        if temperature < 0.0 {
             return Err(ValidationError::Temperature);
         }
 
@@ -422,7 +422,7 @@ pub enum ValidationError {
     BestOfStream,
     #[error("`decoder_input_details` == true is not supported when streaming tokens")]
     PrefillDetailsStream,
-    #[error("`temperature` must be strictly positive")]
+    #[error("`temperature` must be non-negative")]
     Temperature,
     #[error("`repetition_penalty` must be strictly positive")]
     RepetitionPenalty,
@@ -456,6 +456,8 @@ pub enum ValidationError {
     AdapterIdMissing,
     #[error("number of adapter IDs must match number of adapter weights")]
     AdapterWeightMismatch,
+    #[error("Embedding models don't support text generation")]
+    EmbeddingModel,
 }
 
 #[cfg(test)]

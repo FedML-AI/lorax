@@ -101,6 +101,7 @@ class FlashQwen2(FlashCausalLM):
             compile=compile,
             adapter_id=adapter_id,
             adapter_source=adapter_source,
+            trust_remote_code=trust_remote_code,
         )
 
     @property
@@ -142,6 +143,10 @@ class FlashQwen2(FlashCausalLM):
     @property
     def adapter_layers(self) -> List[str]:
         return ADAPTER_LAYERS
+
+    @property
+    def default_traced_adapter_layers(self) -> List[str]:
+        return [ATTN_Q_PROJ, ATTN_V_PROJ]
 
     def get_num_layers_for_type(self, layer_type: str) -> int:
         return 1 if layer_type == LM_HEAD else len(self.model.model.layers)

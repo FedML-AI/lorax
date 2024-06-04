@@ -43,6 +43,11 @@ ADAPTER_MEMORY_FRACTION = float(os.getenv("ADAPTER_MEMORY_FRACTION", "0.1"))
 SLIDING_WINDOW: Optional[int] = None
 SLIDING_WINDOW_BLOCKS: Optional[int] = None
 
+if torch.cuda.is_available():
+    fp8_supported = torch.cuda.get_device_capability()[0] >= 9 or (torch.cuda.get_device_capability()[0] == 8 and torch.cuda.get_device_capability()[1] >= 9)
+else:
+    fp8_supported = False
+
 tracer = trace.get_tracer(__name__)
 
 
@@ -704,6 +709,7 @@ class FlashCausalLM(Model):
         compile: bool = False,
         adapter_id: str = BASE_MODEL_ADAPTER_ID,
         adapter_source: str = HUB,
+        trust_remote_code: bool = False,
     ):
         global SLIDING_WINDOW
         global SLIDING_WINDOW_BLOCKS
@@ -725,6 +731,7 @@ class FlashCausalLM(Model):
             adapter_id=adapter_id,
             adapter_source=adapter_source,
             dynamic_adapter_loading_enabled=True,
+            trust_remote_code=trust_remote_code,
         )
 
         if sliding_window is not None:
@@ -770,7 +777,7 @@ class FlashCausalLM(Model):
                         _, batch = self.generate_token(batch, is_warmup=True)
                         new_seqlen = batch.max_seqlen
                         pbar.update(new_seqlen - cur_seqlen)
-                        if new_seqlen >= max_total_tokens:
+                        if new_seqlen >= max_total_tokens - get_speculative_tokens():
                             break
                 logger.info("Finished generating warmup tokens")
         except RuntimeError as e:
@@ -796,6 +803,7 @@ class FlashCausalLM(Model):
                 self.model,
                 self.device,
                 self.adapter_layers,
+                self.default_traced_adapter_layers,
                 max_total_tokens,
                 self.sliding_window_blocks,
             )
@@ -951,7 +959,9 @@ class FlashCausalLM(Model):
 
         # Assign pointers to adapter weights
         # TODO(travis): don't update this if indices haven't changed
-        adapter_data = AdapterBatchData.from_meta(adapter_meta, self.batched_lora_weights)
+        adapter_data = AdapterBatchData.from_meta(
+            adapter_meta, self.layer_to_adapter_weights, prefill, batch.prefill_head_indices
+        )
 
         out, speculative_logits = self._try_generate_token(batch, adapter_data)
 
@@ -980,7 +990,7 @@ class FlashCausalLM(Model):
 
         if return_alternatives:
             alternative_token_logprobs, alternative_token_ids = torch.sort(
-                torch.log_softmax(next_token_logprobs, -1), dim=-1, stable=True, descending=True
+                torch.log_softmax(next_token_logits, -1), dim=-1, stable=True, descending=True
             )
 
         if prefill:
@@ -1232,6 +1242,10 @@ class FlashCausalLM(Model):
                 )
 
                 generations.append(generation)
+
+            # advance the FSM for each accepted token (as we may have more than one from speculative decoding)
+            for next_token_id in accepted_token_ids:
+                batch.next_token_chooser.next_state(i, next_token_id)
 
             # Update values
             batch.input_lengths[i] = input_length + num_accepted_ids.item()

@@ -31,13 +31,13 @@ struct Args {
     max_concurrent_requests: usize,
     #[clap(default_value = "2", long, env)]
     max_best_of: usize,
-    #[clap(default_value = "4", long, env)]
+    #[clap(default_value = "10", long, env)]
     max_stop_sequences: usize,
     #[clap(default_value = "1792", long, env)]
     max_input_length: usize,
     #[clap(default_value = "2048", long, env)]
     max_total_tokens: usize,
-    #[clap(default_value = "1.2", long, env)]
+    #[clap(default_value = "0.3", long, env)]
     waiting_served_ratio: f32,
     #[clap(default_value = "4096", long, env)]
     max_batch_prefill_tokens: u32,
@@ -63,6 +63,8 @@ struct Args {
     validation_workers: usize,
     #[clap(long, env)]
     json_output: bool,
+    #[clap(long, env)]
+    embedding_model: bool,
     #[clap(long, env)]
     otlp_endpoint: Option<String>,
     #[clap(long, env)]
@@ -109,6 +111,7 @@ async fn main() -> Result<(), RouterError> {
         revision,
         validation_workers,
         json_output,
+        embedding_model,
         otlp_endpoint,
         cors_allow_origin,
         cors_allow_method,
@@ -372,6 +375,7 @@ async fn main() -> Result<(), RouterError> {
         ngrok_authtoken,
         ngrok_edge,
         adapter_source,
+        embedding_model,
     )
     .await?;
     Ok(())

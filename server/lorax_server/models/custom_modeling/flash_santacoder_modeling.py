@@ -5,7 +5,7 @@ import torch.distributed
 from torch import nn
 from transformers.activations import ACT2FN
 
-from lorax_server.utils import flash_attn, paged_attn
+from lorax_server.utils import flash_attn, paged_attention
 from lorax_server.utils.layers import (
     FastLayerNorm,
     TensorParallelColumnLinear,
@@ -28,7 +28,7 @@ def _load_multi_mqa_gptq(config, prefix: str, weights, bias: bool, head_size, nu
         world_size = weights.process_group.size()
         rank = weights.process_group.rank()
 
-        slice_ = weights._get_slice(f"{prefix}.c_attn.qweight")
+        slice_ = weights.get_slice(f"{prefix}.c_attn.qweight")
         shape = slice_.get_shape()
         block_size = (shape[1] - 2 * head_size) // world_size
         start = rank * block_size
@@ -39,7 +39,7 @@ def _load_multi_mqa_gptq(config, prefix: str, weights, bias: bool, head_size, nu
         qweight = torch.cat([q_tensor, kv_tensor], dim=1)
         qweight = qweight.to(device=weights.device)
 
-        slice_ = weights._get_slice(f"{prefix}.c_attn.scales")
+        slice_ = weights.get_slice(f"{prefix}.c_attn.scales")
         shape = slice_.get_shape()
         block_size = (shape[1] - 2 * head_size) // world_size
         start = rank * block_size
@@ -50,7 +50,7 @@ def _load_multi_mqa_gptq(config, prefix: str, weights, bias: bool, head_size, nu
         scales = torch.cat([q_tensor, kv_tensor], dim=1)
         scales = scales.to(device=weights.device)
 
-        slice_ = weights._get_slice(f"{prefix}.c_attn.qzeros")
+        slice_ = weights.get_slice(f"{prefix}.c_attn.qzeros")
         shape = slice_.get_shape()
         block_size = (shape[1] - (2 * head_size) * 4 // 32) // world_size
         start = rank * block_size
@@ -71,7 +71,7 @@ def _load_multi_mqa_gptq(config, prefix: str, weights, bias: bool, head_size, nu
         weight = (qweight, qzeros, scales, g_idx, bits, groupsize, use_exllama)
 
         if bias:
-            slice_ = weights._get_slice(f"{prefix}.c_attn.bias")
+            slice_ = weights.get_slice(f"{prefix}.c_attn.bias")
             shape = slice_.get_shape()
             block_size = (shape[0] - 2 * head_size) // world_size
             assert (shape[0] - 2 * head_size) % world_size == 0
@@ -90,7 +90,7 @@ def _load_multi_mqa_gptq(config, prefix: str, weights, bias: bool, head_size, nu
 
 def _load_multi_mqa(config, prefix: str, weights, bias: bool, head_size, num_heads, hidden_size):
     if any("c_attn" in k for k in weights.routing.keys()):
-        slice_ = weights._get_slice(f"{prefix}.c_attn.weight")
+        slice_ = weights.get_slice(f"{prefix}.c_attn.weight")
         shape = slice_.get_shape()
         world_size = weights.process_group.size()
         rank = weights.process_group.rank()
@@ -111,7 +111,7 @@ def _load_multi_mqa(config, prefix: str, weights, bias: bool, head_size, num_hea
             kv_tensor = slice_[-2 * head_size :]
             weight = torch.cat([q_tensor, kv_tensor], dim=0)
         if bias:
-            slice_ = weights._get_slice(f"{prefix}.c_attn.bias")
+            slice_ = weights.get_slice(f"{prefix}.c_attn.bias")
             shape = slice_.get_shape()
             block_size = (shape[0] - 2 * head_size) // world_size
             assert (shape[0] - 2 * head_size) % world_size == 0
@@ -231,7 +231,7 @@ class FlashMQAttention(torch.nn.Module):
         query = query.view(-1, self.num_heads, self.head_size)
         key_value = key_value.view(-1, 2, 1, self.head_size)
 
-        paged_attn.reshape_and_cache(key_value[:, 0], key_value[:, 1], kv_cache[0], kv_cache[1], slots)
+        paged_attention.reshape_and_cache(key_value[:, 0], key_value[:, 1], kv_cache[0], kv_cache[1], slots)
 
         # output
         attn_output = torch.empty_like(query)
@@ -251,12 +251,12 @@ class FlashMQAttention(torch.nn.Module):
         # Decode
         else:
             # kv_cache[1] => [num_blocks, 1, head_size, block_size]
-            paged_attn.single_query_cached_kv_attention(
+            paged_attention.attention(
                 attn_output,
                 query,
                 kv_cache[0],
                 kv_cache[1],
-                self.kv_head_mapping,
+                self.num_heads,
                 self.softmax_scale,
                 block_tables,
                 input_lengths,

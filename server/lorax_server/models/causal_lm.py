@@ -542,6 +542,7 @@ class CausalLM(Model):
             requires_padding=True,
             dtype=dtype,
             device=device,
+            trust_remote_code=trust_remote_code,
         )
 
         self.dynamic_adapter_loading_enabled = False
@@ -588,7 +589,13 @@ class CausalLM(Model):
 
         # Assign pointers to LoRA weights
         # TODO(travis): don't update this if indices haven't changed
-        adapter_data = AdapterBatchData.from_meta(batch.adapter_meta, self.batched_lora_weights)
+        # Use prefill=True in all cases to force use of SGMV, as the batch is heterogenous
+        adapter_data = AdapterBatchData.from_meta(
+            batch.adapter_meta,
+            self.layer_to_adapter_weights,
+            prefill=True,
+            prefill_head_indices=None,
+        )
 
         logits, past = self.forward(
             batch.input_ids,
@@ -646,6 +653,9 @@ class CausalLM(Model):
                 next_token_id_squeezed,
                 next_token_text,
             )
+
+            # advance FSM state
+            next_token_chooser.next_state(next_token_id_squeezed)
 
             if not stop:
                 stopped = False
