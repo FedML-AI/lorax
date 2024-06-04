@@ -15,7 +15,7 @@ The adapter_source_id and the adapter_id are separated using semicolon (:), and 
 ```bash
 docker run \
   --detach \
-  --gpus "device=3" \
+  --gpus "device=1" \
   --shm-size 1g \
   -p 9999:2345 \
   -v $PWD/../data:/data \
@@ -50,4 +50,4 @@ curl --location 'http://'${IP_ADDRESS}':9999/predict' \
     "top_p": 0.7,
     "adapter_id": "ernest/redline_v0_adapter_432"
 }'
-```
+````

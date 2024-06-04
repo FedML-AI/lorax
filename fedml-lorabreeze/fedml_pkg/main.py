@@ -1,21 +1,26 @@
 import copy
+import threading
+import time
+
 import httpx
 import json
 import os
 import uvicorn
 import requests
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, Request, Response
+from fastapi.responses import JSONResponse, StreamingResponse
 from fedml.serving import FedMLInferenceRunner
 from http import HTTPStatus
+from threading import Lock
 
 
 class LoraxChatCompletionInferenceRunner(FedMLInferenceRunner):
+
+    ARE_ADAPTERS_LOADED = False
+
     def __init__(self):
         super().__init__(None)
-        self.are_adapters_preloaded = False
-
         max_new_tokens = os.getenv("MAX_NEW_TOKENS", "")
         try:
             max_new_tokens = int(max_new_tokens)
@@ -31,54 +36,127 @@ class LoraxChatCompletionInferenceRunner(FedMLInferenceRunner):
             max_tokens=max_new_tokens
         )
 
-    @staticmethod
-    async def stream_generator(inference_url, input_json, header=None):
+        self.fedml_runner_port = 2345
+        self.host = "0.0.0.0"
+        self.lorax_base_url = "http://127.0.0.1:80/v1"
+        self.lorax_inference_url = "http://127.0.0.1:80/generate"
+        self.lorax_health_url = "http://127.0.0.1:80/health"
+        self.are_adapters_loaded = False
+
+        adapters_list = os.getenv("ADAPTERS_PRELOADED", None)
+        if adapters_list:
+            adapters_list = [(adapter.split(":")[0], adapter.split(":")[1])
+                             for adapter in adapters_list.split("|")]
+            bootstrap_adapters_thread = threading.Thread(
+                target=self.boostrap_adapters,
+                args=[adapters_list, self.lorax_health_url, self.lorax_inference_url])
+            bootstrap_adapters_thread.start()
+
+    @classmethod
+    async def stream_generator(cls, inference_url, input_json, header=None):
         async with httpx.AsyncClient() as client:
-            async with client.stream("POST", inference_url, json=input_json, headers=header, timeout=10) as response:
+            async with client.stream("POST", inference_url, json=input_json, headers=header, timeout=30) as response:
                 async for chunk in response.aiter_lines():
                     # we consumed a newline, need to put it back
                     yield f"{chunk}\n"
 
+    @classmethod
+    def is_service_ready(cls, service_url) -> bool:
+        ready = False
+        try:
+            response = requests.get(service_url, timeout=3)
+            if response and response.status_code == 200:
+                ready = True
+        except Exception as e:
+            pass
+
+        return ready
+
+    @classmethod
+    def boostrap_adapters(cls, adapters_list, lorax_health_url, lorax_inference_url) -> bool:
+
+        while not cls.is_service_ready(lorax_health_url):
+            time.sleep(1)
+
+        payload_template = lambda a_id, a_source: \
+            json.dumps({
+                "inputs": "[INST]Test[/INST]",
+                "parameters": {
+                    "adapter_id": a_id,
+                    "adapter_source": a_source
+                }
+            })
+        try:
+            if adapters_list:
+                print("Loading Adapters!!", flush=True)
+                for adapter in adapters_list:
+                    adapter_source, adapter_id = adapter[0], adapter[1]
+                    payload = payload_template(adapter_id, adapter_source)
+                    headers = {'Content-Type': 'application/json'}
+                    response = requests.request("POST",
+                                                url=lorax_inference_url,
+                                                headers=headers,
+                                                data=payload)
+                    print("AdapterID: `{}`, AdapterSource: `{}`, LoadMessage: `{}`".format(
+                        adapter_id, adapter_source, response.text), flush=True)
+
+        except Exception as e:
+            print("Error while loading adapters: ", e, flush=True)
+
+        cls.ARE_ADAPTERS_LOADED = True
+
     def run(self) -> None:
+
         api = FastAPI()
 
         @api.post("/predict")
         @api.post("/completions")
         @api.post("/chat/completions")
         async def predict(request: Request):
+
+            # Need to make sure that the service and
+            # the adapters are successfully loaded to
+            # start the model serving service.
+            if not self.ARE_ADAPTERS_LOADED:
+                return JSONResponse(
+                    status_code=HTTPStatus.TOO_EARLY,
+                    content={
+                        "error": True,
+                        "message": "Service is not ready yet."
+                    })
+
             input_json = await request.json()
 
             accept_type = request.headers.get("Accept", "application/json")
             assert accept_type == "application/json" or accept_type == "*/*"
 
             is_streaming = input_json.get("stream", False)
-
-            lorax_base_url = "http://127.0.0.1:80/v1"
-
-            print(f"Input JSON: {input_json}")
+            print(f"Input JSON: {input_json}", flush=True)
             lorax_json = copy.deepcopy(input_json)
 
             if "adapter_id" not in lorax_json:
                 return {"error": "Request must have \"adapter_id\" in the request body."}
             lorax_json["model"] = lorax_json["adapter_id"]
-            print(f"lorax_json: {lorax_json}")
+            print(f"lorax_json: {lorax_json}", flush=True)
 
             lorax_header = {
                 "Content-Type": "application/json",
             }
 
             if "messages" in input_json:
-                lorax_inference_url = f"{lorax_base_url}/chat/completions"
+                lorax_inference_url = f"{self.lorax_base_url}/chat/completions"
             elif "prompt" in input_json:
-                lorax_inference_url = f"{lorax_base_url}/completions"
+                lorax_inference_url = f"{self.lorax_base_url}/completions"
             else:
-                raise HTTPException(
-                    status_code=HTTPStatus.BAD_REQUEST.value,
-                    detail=f"Request must have either \"messages\" or \"prompt\" in the request body."
-                )
+                return JSONResponse(
+                    status_code=HTTPStatus.BAD_REQUEST,
+                    content={
+                        "error": True,
+                        "message": "Request must have either \"messages\" or \"prompt\" in the request body."
+                    })
 
             if is_streaming:
-                print(f"Streaming response {lorax_inference_url} with {lorax_json} and {lorax_header}")
+                print(f"Streaming response {lorax_inference_url} with {lorax_json} and {lorax_header}", flush=True)
                 return StreamingResponse(
                     self.stream_generator(lorax_inference_url, header=lorax_header, input_json=lorax_json),
                     media_type="text/event-stream",
@@ -92,42 +170,22 @@ class LoraxChatCompletionInferenceRunner(FedMLInferenceRunner):
 
         @api.get("/ready")
         async def ready():
-            local_health_url = "http://127.0.0.1:80/health"
-            response = None
-            try:
-                response = requests.get(local_health_url, timeout=3)
-            except Exception as e:
-                pass
 
-            if not response or response.status_code != 200:
-                # Return 408 code - Basically r
-                raise HTTPException(
-                    status_code=HTTPStatus.REQUEST_TIMEOUT.value,
-                    detail=f"Local server is not ready.")
+            # Need to make sure that the service is online
+            # and the adapters are successfully loaded to
+            # start the model serving service.
+            if not self.is_service_ready(self.lorax_health_url) \
+                    or not self.ARE_ADAPTERS_LOADED:
+                return JSONResponse(
+                    status_code=HTTPStatus.TOO_EARLY,
+                    content={
+                        "error": True,
+                        "message": "Service is not ready yet!"
+                    })
 
-            if self.are_adapters_preloaded is False:
-                url = "http://127.0.0.1:80/generate"
-                payload_template = lambda a_id, a_source: \
-                    json.dumps({"inputs": "[INST]Test[/INST]", "adapter_id": a_id, "adapter_source": a_source})
-                try:
-                    adapters_preloaded = os.getenv("ADAPTERS_PRELOADED", None)
-                    if adapters_preloaded:
-                        adapters = adapters_preloaded.split("|")
-                        for adapter in adapters:
-                            adapter_source, adapter_id = adapter.split(":")
-                            payload = payload_template(adapter_id, adapter_source)
-                            headers = {'Content-Type': 'application/json'}
-                            response = requests.request("POST", url, headers=headers, data=payload)
-                            print("AdapterID: `{}`, AdapterSource: `{}`, LoadMessage: `{}`".format(
-                                adapter_id, adapter_source, response.text))
-                except Exception as e:
-                    print("Error while loading adapters: ", e)
-                self.are_adapters_preloaded = True
+            return JSONResponse(content={"message": "Service is ready!"})
 
-            return True
-
-        port = 2345
-        uvicorn.run(api, host="0.0.0.0", port=port)
+        uvicorn.run(api, host=self.host, port=self.fedml_runner_port)
 
 
 if __name__ == "__main__":
