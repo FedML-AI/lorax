@@ -43,13 +43,17 @@ class LoraxChatCompletionInferenceRunner(FedMLInferenceRunner):
         self.lorax_health_url = "http://127.0.0.1:80/health"
         self.are_adapters_loaded = False
 
-        adapters_list = os.getenv("ADAPTERS_PRELOADED", None)
-        if adapters_list:
-            adapters_list = [(adapter.split(":")[0], adapter.split(":")[1])
-                             for adapter in adapters_list.split("|")]
+        self.model_id = os.getenv("MODEL_ID", None)
+        if not self.model_id:
+            raise RuntimeError("The 'MODEL_ID' environment variable cannot be empty!")
+        adapters_list_env = os.getenv("ADAPTERS_PRELOADED", None)
+        self.adapters_list = []
+        if adapters_list_env:
+            self.adapters_list = [(adapter.split(":")[0], adapter.split(":")[1])
+                                  for adapter in adapters_list_env.split("|")]
             bootstrap_adapters_thread = threading.Thread(
                 target=self.boostrap_adapters,
-                args=[adapters_list, self.lorax_health_url, self.lorax_inference_url])
+                args=[self.adapters_list, self.lorax_health_url, self.lorax_inference_url])
             bootstrap_adapters_thread.start()
 
     @classmethod
@@ -133,10 +137,19 @@ class LoraxChatCompletionInferenceRunner(FedMLInferenceRunner):
             is_streaming = input_json.get("stream", False)
             print(f"Input JSON: {input_json}", flush=True)
             lorax_json = copy.deepcopy(input_json)
+            # We know the model, but we need to specify the
+            # JSON attribute, else the FEDML Predictor will fail.
+            lorax_json["model"] = self.model_id
 
-            if "adapter_id" not in lorax_json:
-                return {"error": "Request must have \"adapter_id\" in the request body."}
-            lorax_json["model"] = lorax_json["adapter_id"]
+            # Making sure the requested adapters are part of the predefined ADAPTERS_PRELOADED list!
+            existing_adapter_ids = [adapter_id for _, adapter_id in self.adapters_list]
+
+            if "adapter_id" in lorax_json:
+                if lorax_json["adapter_id"] not in existing_adapter_ids:
+                    return {"error": f"Requested 'adapter_id':'{lorax_json['adapter_id']}' "
+                                     "is not part of the original 'ADAPTERS_PRELOADED' list. "
+                                     "Please update the model card."}
+
             print(f"lorax_json: {lorax_json}", flush=True)
 
             lorax_header = {
