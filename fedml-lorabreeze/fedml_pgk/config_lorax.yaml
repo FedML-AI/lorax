@@ -2,7 +2,7 @@ workspace: "."
 use_gpu: true
 num_gpus: 1
 
-inference_image_name: "raphael/lorax"
+inference_image_name: "fedml/fedml-lorabreeze"
 
 auto_detect_public_ip: true
 request_input_example:
