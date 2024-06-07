@@ -2,7 +2,7 @@ workspace: "."
 use_gpu: true
 num_gpus: 1
 
-inference_image_name: "fedml/fedml-lorabreeze"
+inference_image_name: "fedml/fedml-lorabreeze:latest"
 
 auto_detect_public_ip: true
 request_input_example:
@@ -17,7 +17,6 @@ request_input_example:
     content: Where was it played?
 
 environment_variables:
-  #  Launcher Markdown file: `lorax/docs/reference/launcher.md`
   MODEL_ID: ""  # The base model in hugging face OR a local directory.
   QUANTIZE: ""  # Possible Values: bitsandbytes, bitsandbytes-nf4, bitsandbytes-fp4, gptq, awq, eetq, hqq-4bit, hqq-3bit, hqq-2bit
   ADAPTERS_PRELOADED: ""  # Model-compatible adapters, the format is "adapter_source_1:adapter_id_1|adapter_source_2:adapter_id_2", e.g., "hub:ernest/redline_v2_adapter_400|hub:ernest/redline_v0_adapter_432"
